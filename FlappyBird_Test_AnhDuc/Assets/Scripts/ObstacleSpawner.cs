@@ -52,6 +52,11 @@ public class ObstacleSpawner : MonoBehaviour
                     yield return new WaitForSeconds(delay);
 
                     RandomizeObstacle(obst, spawnX); // Set new position and height
+                    PlayerManager.instance.nextObstacles.Add(obst);
+                    if (PlayerManager.instance.nextObstacles.Count == 1)
+                    {
+                        PlayerManager.instance.nextObstacle = PlayerManager.instance.nextObstacles[0];
+                    }
                     obst.SetActive(true);
                 }
             }

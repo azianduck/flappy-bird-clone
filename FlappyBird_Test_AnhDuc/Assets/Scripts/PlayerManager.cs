@@ -6,6 +6,7 @@ using Unity.VisualScripting;
 using DigitalRuby.RainMaker;
 using UnityEngine;
 using UnityEngine.UI;
+using System;
 
 public class PlayerManager : MonoBehaviour
 {
@@ -37,6 +38,16 @@ public class PlayerManager : MonoBehaviour
 
     private float screenWidth;
     private float screenHeight;
+    // public bool effectedByGravity;
+    public bool autoPlay = false;
+    public bool autoPlayDebug = false;
+    public float minPace;
+    public float maxPace;
+    public float normalPace;
+    public bool dead;
+    private float score = 0f;
+    private HashSet<GameObject> scoredObstacles = new HashSet<GameObject>(); // Track scored obstacles
+
     private void Awake()
     {
         instance = this;
@@ -44,50 +55,131 @@ public class PlayerManager : MonoBehaviour
 
     private void Start()
     {
+        // effectedByGravity = true;
+        // slider1.value = autoJumpPace;
+        OnAutoPlayChanged();
         OnBGMusicChanged();
         UpdateScoreDisplay();
         screenWidth = Camera.main.aspect * Camera.main.orthographicSize * 2;
         screenHeight = screenWidth / Camera.main.aspect; // Calculate screenHeight
         bgMusic.SetActive(true);
         if (spawnAtStart) birdPlayer.transform.localPosition = new Vector3(-screenWidth * 40, screenHeight, 0);
+        // GetFirstLowValue();
+        // if (!jumped)
+        // {
+        //     jumped = true;
+        //     Invoke("AutoJumpRoutine", 3f);
+        // }
     }
 
     private void FixedUpdate()
     {
+        deltaTime = Time.fixedDeltaTime;
+        gravityDelta = gravity * Time.fixedDeltaTime;
         if (isPlaying) BackgroundMoving();
-    }
-
-
-    public float dropThreshHold;
-
-    public bool dead;
-
-    private void Update()
-    {
-        // Check for jump input
-        if (!dead && isPlaying)
-        {
-            if (Input.GetKeyDown(KeyCode.Space) || Input.GetMouseButtonDown(0))
-            {
-                wingEffect.SetActive(false);
-                wingEffect.SetActive(true);
-                verticalVelocity = jumpVelocity;
-                Invoke("StartApplyingGravity", 0.1f);
-                return;
-            }
-        }
-
         if (applyGravity)
         {
             SimulateGravity();
             CheckObstacleCollisions();
         }
+
+        if (autoPlayDebug)
+        {
+            if (!jumped)
+            {
+                jumped = true;
+                Invoke("AutoJumpRoutine", 0);
+            }
+        }
+
+
+        if (autoPlay)
+        {
+            if (nextObstacle != null) AutoChangePace();
+            if (heightDifferent == 0)
+            {
+
+            }
+            if (!dead && isPlaying)
+            {
+                if (!jumped)
+                {
+                    jumped = true;
+                    Invoke("AutoJumpRoutine", 0f);
+                }
+
+            }
+        }
+    }
+    public bool jumped;
+
+    private void Update()
+    {
+        if (!autoPlay)
+        {
+            // if (nextObstacle != null)
+            // {
+            //     AutoChangePace();
+            // }
+            if (!dead && isPlaying)
+            {
+                if (Input.GetKeyDown(KeyCode.Space) || Input.GetMouseButtonDown(0))
+                {
+                    BirdJump();
+                }
+            }
+        }
     }
 
+    public bool getFirstLowValue = false;
+    public bool getFirstBigValue = false;
+
+    public void AutoJumpRoutine()
+    {
+        applyGravity = true;
+        StartCoroutine(BirdAutoJump());
+    }
+
+    IEnumerator BirdAutoJump()
+    {
+        wingEffect.SetActive(false);
+        wingEffect.SetActive(true);
+        verticalVelocity = jumpVelocity;
+        biggestNum = birdPlayer.transform.localPosition.y;
+        yield return new WaitForSeconds(autoJumpPace);
+        jumped = false;
+    }
+
+    public void GetFirstLowValue()
+    {
+        if (!getFirstLowValue)
+        {
+            lowestNum = birdPlayer.transform.localPosition.y;
+            getFirstLowValue = true;
+        }
+    }
+    // public void GetFirstBigValue()
+    // {
+    //     if (!getFirstBigValue)
+    //     {
+    //         biggestNum = birdPlayer.transform.localPosition.y;
+    //         getFirstBigValue = true;
+    //     }
+    // }
+
+    public void BirdJump()
+    {
+        wingEffect.SetActive(false);
+        wingEffect.SetActive(true);
+        verticalVelocity = jumpVelocity;
+    }
+
+    public float deltaTime;
+    public float gravityDelta;
     void SimulateGravity()
     {
         // Apply gravity
-        verticalVelocity += gravity * Time.deltaTime;
+        verticalVelocity += gravity * Time.fixedDeltaTime;
 
         if (verticalVelocity < 0)
         {
@@ -122,8 +214,6 @@ public class PlayerManager : MonoBehaviour
             birdPlayer.transform.rotation = Quaternion.Euler(0f, 0f, 35f);
         }
 
-        dropThreshHold = -screenHeight;
-
         if (birdPlayer.transform.position.y < -screenHeight / 2)
         {
 
@@ -131,17 +221,35 @@ public class PlayerManager : MonoBehaviour
             ResetGame();
         }
         // Move the bird vertically
-        birdPlayer.transform.position += new Vector3(0f, verticalVelocity * Time.deltaTime, 0f);
+        birdPlayer.transform.position += new Vector3(0f, verticalVelocity * Time.fixedDeltaTime, 0f);
     }
 
-    void StartApplyingGravity()
+    public float biggestNum;
+    public float num;
+    public float lowestNum;
+
+    public void GetBiggestNumber(float num)
     {
-        // This function will be called after a short delay to start applying gravity
+        if (num > biggestNum)
+        {
+            biggestNum = num;
+        }
+    }
+    public void GetLowestNum(float num)
+    {
+        if (num < lowestNum)
+        {
+            lowestNum = num;
+        }
     }
 
+    // void StartApplyingGravity()
+    // {
+    //     // This function will be called after a short delay to start applying gravity
+    //     effectedByGravity = true;
+    // }
 
-    private float score = 0f;
-    private HashSet<GameObject> scoredObstacles = new HashSet<GameObject>(); // Track scored obstacles
+
 
 
     void CheckObstacleCollisions()
@@ -162,18 +270,23 @@ public class PlayerManager : MonoBehaviour
 
             RectTransform topObstacleRectTransform = obstacle.transform.GetChild(1).GetComponent<RectTransform>();
             RectTransform bottomObstacleRectTransform = obstacle.transform.GetChild(0).GetComponent<RectTransform>();
-            RectTransform middleGapRectTransform = obstacle.transform.GetChild(2).GetComponent<RectTransform>();
+            RectTransform passGapRectTransform = obstacle.transform.Find("Pass").GetComponent<RectTransform>();
+            RectTransform middleObstacleRectTransform = obstacle.transform.Find("Middle").GetComponent<RectTransform>();
 
             Vector3[] topObstacleCorners = new Vector3[4];
             Vector3[] bottomObstacleCorners = new Vector3[4];
-            Vector3[] middleGapCorners = new Vector3[4];
+            Vector3[] passGapCorners = new Vector3[4];
+            Vector3[] middleCorners = new Vector3[4];
+
             topObstacleRectTransform.GetWorldCorners(topObstacleCorners);
             bottomObstacleRectTransform.GetWorldCorners(bottomObstacleCorners);
-            middleGapRectTransform.GetWorldCorners(middleGapCorners);
+            passGapRectTransform.GetWorldCorners(passGapCorners);
+            middleObstacleRectTransform.GetWorldCorners(middleCorners);
 
             Rect topObstacleRect = new Rect(topObstacleCorners[0], topObstacleCorners[2] - topObstacleCorners[0]);
             Rect bottomObstacleRect = new Rect(bottomObstacleCorners[0], bottomObstacleCorners[2] - bottomObstacleCorners[0]);
-            Rect middleObstacleRect = new Rect(middleGapCorners[0], middleGapCorners[2] - middleGapCorners[0]);
+            Rect passObstacleRect = new Rect(passGapCorners[0], passGapCorners[2] - passGapCorners[0]);
+            Rect middleObstacleRect = new Rect(middleCorners[0], middleCorners[2] - middleCorners[0]);
 
             if (birdRect.Overlaps(topObstacleRect) || birdRect.Overlaps(bottomObstacleRect))
             {
@@ -185,12 +298,20 @@ public class PlayerManager : MonoBehaviour
                 GameOver();
                 return;
             }
-            else if (sensorRect.Overlaps(middleObstacleRect) && !scoredObstacles.Contains(obstacle))
+            else if (sensorRect.Overlaps(middleObstacleRect))
+            {
+                nextObstacles.Remove(obstacle);
+                nextObstacle = nextObstacles[0];
+            }
+            else if (sensorRect.Overlaps(passObstacleRect) && !scoredObstacles.Contains(obstacle))
             {
                 GetScore(obstacle);
             }
         }
     }
+
+    public List<GameObject> nextObstacles;
+    public GameObject nextObstacle;
 
     public void GetScore(GameObject obstacle)
     {
@@ -204,6 +325,8 @@ public class PlayerManager : MonoBehaviour
     }
 
     public GameObject flashing;
+    public Slider slider1;
+    public Slider slider2;
 
     public void GameOver()
     {
@@ -213,13 +336,28 @@ public class PlayerManager : MonoBehaviour
     private void ResetGame()
     {
         newGameButton.SetActive(true);
+        nextObstacles.Clear();
+        nextObstacle = null;
         dead = false;
+        distance = 0;
         applyGravity = false;
+        autoJumpPace = 0.452f;
         flashing.SetActive(false);
         birdPlayer.SetActive(false);
         ObstacleSpawner.instance.StopSpawning();
         score = 0;
+        if (autoPlay) StartCoroutine(OnDieAutoPlay());
     }
+
+    IEnumerator OnDieAutoPlay()
+    {
+        yield return new WaitForSeconds(1f);
+        Invoke("OnStartGameClick", 0f);
+        newGameButton.SetActive(false);
+    }
+
+    public GameObject takeControlInvite;
+    public Toggle autoPlayToggle;
 
     public void OnStartGameClick()
     {
@@ -230,6 +368,24 @@ public class PlayerManager : MonoBehaviour
         UpdateScoreDisplay();
         SpawnTheBird();
         ObstacleSpawner.instance.StartSpawnObstacle();
+        if (autoPlay)
+        {
+            takeControlInvite.SetActive(true);
+        }
+        else
+        {
+            takeControlInvite.SetActive(false);
+        }
+    }
+
+    public void OnUserTakeControl()
+    {
+        if (autoPlay)
+        {
+            autoPlayToggle.isOn = false;
+            autoPlay = false;
+            takeControlInvite.SetActive(false);
+        }
     }
 
     public void OnBGMusicChanged()
@@ -243,6 +399,20 @@ public class PlayerManager : MonoBehaviour
         {
             bgMusic.GetComponent<AudioSource>().mute = false;
             isBackgroundMusicOn = true;
+        }
+    }
+
+    public void OnAutoPlayChanged()
+    {
+        if (autoPlay)
+        {
+            autoPlay = false;
+            if (isPlaying) takeControlInvite.SetActive(false);
+        }
+        else
+        {
+            autoPlay = true;
+            if (isPlaying) takeControlInvite.SetActive(true);
         }
     }
 
@@ -326,65 +496,197 @@ public class PlayerManager : MonoBehaviour
         }
         return digits.ToArray();
     }
+
+    public float adjustmentPaceUp;
+    public float adjustmentPaceDown;
+    public float autoJumpPace;
+    public float distance;
+    public float heightDifferent;
+
+    public void AutoChangePace()
+    {
+        float nextHeight;
+        float offsetHeight = nextObstacle.transform.Find("offset1").transform.position.y;
+        float offsetHeight2 = nextObstacle.transform.Find("offset2").transform.position.y;
+
+        distance = nextObstacle.transform.Find("Middle").transform.position.x - birdPlayer.transform.position.x;
+        nextHeight = nextObstacle.transform.position.y;
+
+
+        Debug.LogWarning("bird : " + birdPlayer.transform.position.y);
+        Debug.LogWarning("nextOBST : " + nextObstacle.transform.position.y);
+
+        heightDifferent = nextHeight - birdPlayer.transform.position.y;
+
+
+        if (distance > 0.7f)
+        {
+            if (heightDifferent > 1.5f && distance > 1.5f)
+            {
+                autoJumpPace -= adjustmentPaceUp * heightDifferent * 4f;
+                Debug.Log("<color=yellow>WAIT FOR SHARP UP -- : " + autoJumpPace + "</color>");
+            }
+            else if (heightDifferent > 1.5f && distance < 1.5f)
+            {
+                autoJumpPace -= adjustmentPaceUp * heightDifferent * 6f;
+                Debug.Log("<color=yellow> SHARP UP -- : " + autoJumpPace + "</color>");
+
+            }
+            else if (heightDifferent < -1.5f && distance > 1.5f)
+            {
+                autoJumpPace += adjustmentPaceDown * (Math.Abs(heightDifferent) * 3f);
+                Debug.Log("<color=yellow>WAIT FOR SHARP DOWN -- : " + autoJumpPace + "</color>");
+                if (birdPlayer.transform.position.y <= offsetHeight)
+                {
+                    autoJumpPace = 0.13f;
+                    Debug.Log("<color=white> GO STRAIGHT : " + autoJumpPace + "</color>");
+                }
+            }
+            else if (heightDifferent < -1.5f && distance < 1.5f)
+            {
+                autoJumpPace = 1000f;
+                // autoJumpPace = adjustmentPaceDown * (Math.Abs(heightDifferent) * 1000);
+                Debug.Log("<color=yellow>SHARP DOWN -- : " + autoJumpPace + "</color>");
+                if (birdPlayer.transform.position.y <= offsetHeight)
+                {
+                    autoJumpPace = 0.13f;
+                    Debug.Log("<color=white> GO STRAIGHT : " + autoJumpPace + "</color>");
+                }
+            }
+            else if (heightDifferent > 0.5f && heightDifferent < 1.5f && distance > 1.5f)
+            {
+                autoJumpPace -= adjustmentPaceUp * heightDifferent * 4f;
+                Debug.Log("<color=green> Pace -- : " + autoJumpPace + "</color>");
+            }
+            else if (heightDifferent > 0.5f && heightDifferent < 1.5f && distance < 1.5f)
+            {
+                autoJumpPace -= adjustmentPaceUp * heightDifferent * 8f;
+                Debug.Log("<color=green> Pace -- : " + autoJumpPace + "</color>");
+            }
+            else if (heightDifferent < -0.5f && heightDifferent > -1.5f && distance > 1.5f)
+            {
+                autoJumpPace += adjustmentPaceDown * (Math.Abs(heightDifferent) * 4f);
+                Debug.Log("<color=red> Pace ++ : " + autoJumpPace + "</color>");
+                if (birdPlayer.transform.position.y <= offsetHeight2)
+                {
+                    autoJumpPace = 0.13f;
+                    Debug.Log("<color=white> GO STRAIGHT : " + autoJumpPace + "</color>");
+                }
+            }
+            else if (heightDifferent < -0.5f && heightDifferent > -1.5f && distance < 1.5f)
+            {
+                autoJumpPace += adjustmentPaceDown * (Math.Abs(heightDifferent) * 6f);
+                Debug.Log("<color=red> Pace ++ : " + autoJumpPace + "</color>");
+                if (birdPlayer.transform.position.y <= offsetHeight2)
+                {
+                    autoJumpPace = 0.13f;
+                    Debug.Log("<color=white> GO STRAIGHT : " + autoJumpPace + "</color>");
+                }
+            }
+            else if (heightDifferent > 0f && heightDifferent < 0.5f && distance > 1.5f)
+            {
+                autoJumpPace = normalPace;
+                Debug.Log("<color=white> GO STRAIGHT : " + autoJumpPace + "</color>");
+            }
+            else if (heightDifferent > 0f && heightDifferent < 0.5f && distance < 1.5f)
+            {
+                autoJumpPace = normalPace;
+                Debug.Log("<color=white> GO STRAIGHT : " + autoJumpPace + "</color>");
+            }
+            else if (heightDifferent < 0f && heightDifferent < -0.5f && distance > 1.5f)
+            {
+                autoJumpPace = normalPace;
+                Debug.Log("<color=white> GO STRAIGHT : " + autoJumpPace + "</color>");
+                if (birdPlayer.transform.position.y <= offsetHeight2)
+                {
+                    autoJumpPace = 0.13f;
+                    Debug.Log("<color=white> GO STRAIGHT : " + autoJumpPace + "</color>");
+                }
+                else
+                {
+                    autoJumpPace = normalPace;
+                }
+            }
+            else if (heightDifferent < 0f && heightDifferent < -0.5f && distance < 1.5f)
+            {
+                Debug.Log("<color=white> GO STRAIGHT : " + autoJumpPace + "</color>");
+                if (birdPlayer.transform.position.y <= offsetHeight2)
+                {
+                    autoJumpPace = 0.13f;
+                    Debug.Log("<color=white> GO STRAIGHT : " + autoJumpPace + "</color>");
+                }
+                else
+                {
+                    autoJumpPace = normalPace;
+                }
+            }
+            else
+            {
+                autoJumpPace = normalPace;
+                Debug.Log("<color=white> GO STRAIGHT : " + autoJumpPace + "</color>");
+            }
+        }
+        else
+        {
+            autoJumpPace = normalPace;
+            Debug.Log("<color=white> GO STRAIGHT : " + autoJumpPace + "</color>");
+        }
+
+        // slider1.value = autoJumpPace;
+        autoJumpPace = Mathf.Clamp(autoJumpPace, minPace, maxPace);
+    }
+
+    // private void OnDrawGizmos()
+    // {
+    //     // Draw Obstacle Bounds
+    //     Gizmos.color = Color.red; // Color for the obstacles' bounds
+
+
+    //     if (nextObstacle != null)
+    //     {
+    //         // Get RectTransforms of top and bottom obstacles
+    //         // RectTransform topObstacleRectTransform = obstacle.transform.GetChild(2).GetComponent<RectTransform>();
+    //         RectTransform nextObstaclesRectTransform = nextObstacle.transform.Find("Middle").GetComponent<RectTransform>();
+
+    //         // Draw top obstacle bounds
+    //         if (nextObstaclesRectTransform != null)
+    //         {
+    //             Vector3[] nextObstacleCorners = new Vector3[4];
+    //             Transform targetChild = nextObstaclesRectTransform.transform; // Get the first child (you can change the index as needed)
+
+    //             nextObstaclesRectTransform.GetWorldCorners(nextObstacleCorners);
+    //             for (int i = 0; i < 4; i++)
+    //             {
+    //                 Gizmos.DrawLine(nextObstacleCorners[i], nextObstacleCorners[(i + 1) % 4]);
+    //             }
+    //             if (targetChild != null)
+    //             {
+    //                 Gizmos.color = Color.yellow; // Choose your desired color
+    //                 Gizmos.DrawLine(birdPlayer.transform.position, targetChild.position);
+    //             }
+    //         }
+
+    //         // Draw bottom obstacle bounds
+    //     }
+
+    // }
 }
 
 
-
-// private void OnDrawGizmos()
+// if (birdPlayer != null)
 // {
-//     // Draw Bird Bounds
-//     if (birdPlayer != null)
+//     RectTransform birdRectTransform = birdPlayer.GetComponent<RectTransform>();
+//     if (birdRectTransform != null)
 //     {
-//         RectTransform birdRectTransform = birdPlayer.GetComponent<RectTransform>();
-//         if (birdRectTransform != null)
+//         Gizmos.color = Color.red; // Color for the bird's bounds
+//         Vector3[] birdCorners = new Vector3[4];
+//         birdRectTransform.GetWorldCorners(birdCorners);
+
+//         // Draw lines connecting bird's corners
+//         for (int i = 0; i < 4; i++)
 //         {
-//             Gizmos.color = Color.red; // Color for the bird's bounds
-//             Vector3[] birdCorners = new Vector3[4];
-//             birdRectTransform.GetWorldCorners(birdCorners);
-
-//             // Draw lines connecting bird's corners
-//             for (int i = 0; i < 4; i++)
-//             {
-//                 Gizmos.DrawLine(birdCorners[i], birdCorners[(i + 1) % 4]);
-//             }
-//         }
-//     }
-
-//     // Draw Obstacle Bounds
-//     if (ObstacleSpawner.instance != null && ObstacleSpawner.instance.obstacles != null)
-//     {
-//         Gizmos.color = Color.green; // Color for the obstacles' bounds
-
-//         foreach (GameObject obstacle in ObstacleSpawner.instance.obstacles)
-//         {
-//             if (obstacle != null)
-//             {
-//                 // Get RectTransforms of top and bottom obstacles
-//                 RectTransform topObstacleRectTransform = obstacle.transform.GetChild(1).GetComponent<RectTransform>();
-//                 RectTransform bottomObstacleRectTransform = obstacle.transform.GetChild(0).GetComponent<RectTransform>();
-
-//                 // Draw top obstacle bounds
-//                 if (topObstacleRectTransform != null)
-//                 {
-//                     Vector3[] topObstacleCorners = new Vector3[4];
-//                     topObstacleRectTransform.GetWorldCorners(topObstacleCorners);
-//                     for (int i = 0; i < 4; i++)
-//                     {
-//                         Gizmos.DrawLine(topObstacleCorners[i], topObstacleCorners[(i + 1) % 4]);
-//                     }
-//                 }
-
-//                 // Draw bottom obstacle bounds
-//                 if (bottomObstacleRectTransform != null)
-//                 {
-//                     Vector3[] bottomObstacleCorners = new Vector3[4];
-//                     bottomObstacleRectTransform.GetWorldCorners(bottomObstacleCorners);
-//                     for (int i = 0; i < 4; i++)
-//                     {
-//                         Gizmos.DrawLine(bottomObstacleCorners[i], bottomObstacleCorners[(i + 1) % 4]);
-//                     }
-//                 }
-//             }
+//             Gizmos.DrawLine(birdCorners[i], birdCorners[(i + 1) % 4]);
 //         }
 //     }
 // }
+
